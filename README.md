@@ -1,17 +1,13 @@
-# astar_pathfinder
+# Where am I Univ App
+## 概要
+このアプリは 大学での課題 ~無理やり作らされる拷問~　で作っているものをGitで管理してるついでに公開してるものです。\使ってもらう前提ではないので、あえて使い方は掲載しないです。(E館狭いからまず迷うことないだろうし)
 
-A new Flutter project.
+## 推定方法
+推定方法はただただ自慢したいため、紹介します。\
+推定方法は**画像**と**Wifi**の2つを併用します。\
 
-## Getting Started
+# 画像について
+撮影したものをSQLに保管しており、迷った場所で撮影したものとSQLの写真をコサイン類似度を利用して、ここだと考えられるところを推定します。
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+# Wifiについて
+Wifi ESSIフィンガープリントを利用します。WifiのSSIDや電波強度をSQLに保存し、迷った場所でWifiを参照し、SQLに登録されているものに近い場所を特定します。(大学がWifiを買い替えたりSSIDを変更しない前提)
