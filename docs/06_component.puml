@@ -1,0 +1,58 @@
+@startuml component
+title コンポーネント図 — システム全体構成
+
+skinparam componentStyle rectangle
+
+actor "ユーザー" as User
+
+package "Flutter アプリ (iOS / Android)" {
+
+  package "プレゼンテーション層" {
+    [GraphPage\nグラフ + 詳細パネル] as UIGraph
+    [PhotoRegisterPage\nカメラ + 散布図] as UIReg
+    [GraphPainter /\nScatterPainter] as Painters
+  }
+
+  package "ドメイン / サービス層" {
+    [LocationService\n(埋め込み・PCA・登録)] as Svc
+    [A* 経路探索] as Astar
+    [画像識別\n(コサイン類似度)] as Ident
+  }
+
+  package "データ層" {
+    database "SQLite\nembeddings" as DB
+    [アセット画像\nlib/images/*.png] as Assets
+  }
+}
+
+package "プラットフォーム / 外部パッケージ" {
+  [camera] as Cam
+  [image_picker] as Picker
+  [image (記述子)] as ImgLib
+  [sqflite] as Sqf
+}
+
+cloud "Python (オフライン)" {
+  [view_db.py\nDB閲覧/CSV出力] as ViewDB
+}
+
+User --> UIGraph
+User --> UIReg
+UIGraph --> Painters
+UIReg --> Painters
+UIGraph --> Astar
+UIGraph --> Ident
+UIGraph --> Svc
+UIReg --> Svc
+
+Svc --> ImgLib
+Svc --> Sqf
+Sqf --> DB
+Svc --> Assets
+Ident --> Assets
+UIReg --> Cam
+UIGraph --> Picker
+
+ViewDB ..> DB : 実機から取得して閲覧
+
+@enduml

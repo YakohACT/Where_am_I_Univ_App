@@ -1,0 +1,163 @@
+@startuml class_diagram
+title 屋内ナビゲーションアプリ (no10) — クラス図
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+
+' ─────────── アプリ層 (main.dart) ───────────
+package "UI層 (main.dart)" {
+
+  class MyApp <<StatelessWidget>> {
+    + build(context): Widget
+  }
+
+  class GraphPage <<StatefulWidget>> {
+    + createState(): _GraphPageState
+  }
+
+  class _GraphPageState <<State>> {
+    - {static} nodes: List<GraphNode>
+    - {static} edges: List<GraphEdge>
+    - _selectedNode: GraphNode?
+    - _startNodeId: String?
+    - _goalNodeId: String?
+    - _path: List<String>
+    - _picker: ImagePicker
+    - _featureCache: Map<String,List<double>>
+    - _matchBanner: String?
+    --
+    + initState()
+    - _identifyByPhoto(): Future<void>
+    - _openPhotoRegister(node): Future<void>
+    - _astar(start, goal): List<String>
+    - _featureFromBytes(bytes): List<double>?
+    - _cosine(a, b): double
+    - _setStart(node) / _setGoal(node)
+  }
+
+  class GraphNode {
+    + id: String
+    + label: String
+    + position: Offset
+    + image: String
+  }
+
+  class GraphEdge {
+    + from: String
+    + to: String
+  }
+
+  class GraphPainter <<CustomPainter>> {
+    + paint(canvas, size)
+    + shouldRepaint(old): bool
+  }
+
+  class _DetailPanel <<StatelessWidget>>
+  class _ActionButton <<StatelessWidget>>
+  class _ResultBanner <<StatelessWidget>>
+}
+
+' ─────────── 位置登録画面 (photo_register_page.dart) ───────────
+package "位置登録画面 (photo_register_page.dart)" {
+
+  class PhotoRegisterPage <<StatefulWidget>> {
+    + targetNodeId: int
+    + targetNodeName: String
+  }
+
+  class _PhotoRegisterPageState <<State>> {
+    - _camera: CameraController?
+    - _captured: File?
+    - _est: EstimationResult?
+    - _estPoint: NodePoint?
+    --
+    - _initCamera()
+    - _captureAndEstimate(): Future<void>
+    - _retake()
+    - _saveToDb(): Future<void>
+  }
+
+  class ScatterPainter <<CustomPainter>> {
+    + paint(canvas, size)
+  }
+}
+
+' ─────────── ドメイン/サービス層 (location_service.dart) ───────────
+package "サービス層 (location_service.dart)" {
+
+  class LocationService <<singleton>> {
+    + {static} instance: LocationService
+    + {static} baseNodes: List<BaseNode>
+    - _db: Database?
+    - _mean / _std: List<double>
+    - _pc1 / _pc2: List<double>
+    - _basePoints: List<NodePoint>
+    --
+    + init(): Future<void>
+    + estimate(bytes): EstimationResult?
+    + register(name, est): Future<NodePoint>
+    + basePoints: List<NodePoint>
+    + dbPath(): Future<String>
+    - _featureFromBytes(bytes): List<double>?
+    - _buildPca(vectors)
+    - _powerIteration(c, d): List<double>
+    - _project(vector): List<double>
+    - _openDb(baseVectors)
+  }
+
+  class BaseNode {
+    + id: int
+    + name: String
+    + image: String
+  }
+
+  class NodePoint {
+    + id: int
+    + name: String
+    + pcaX: double
+    + pcaY: double
+    + isBase: bool
+  }
+
+  class EstimationResult {
+    + vector: List<double>
+    + pcaX: double
+    + pcaY: double
+  }
+}
+
+' ─────────── 外部依存 ───────────
+package "外部パッケージ / OS" {
+  class "sqflite\n(SQLite)" as SQLite <<external>>
+  class "camera" as Camera <<external>>
+  class "image_picker" as ImagePicker <<external>>
+  class "image (記述子用)" as ImageLib <<external>>
+}
+
+' ─────────── 関係 ───────────
+MyApp --> GraphPage
+GraphPage *-- _GraphPageState
+_GraphPageState "1" o-- "18" GraphNode
+_GraphPageState "1" o-- "22" GraphEdge
+_GraphPageState --> GraphPainter : 描画
+_GraphPageState --> _DetailPanel
+_DetailPanel --> _ActionButton
+_GraphPageState ..> _ResultBanner
+_GraphPageState --> PhotoRegisterPage : push
+_GraphPageState ..> ImagePicker : カメラ識別
+_GraphPageState ..> LocationService : init()/baseNodeByImage()
+
+PhotoRegisterPage *-- _PhotoRegisterPageState
+_PhotoRegisterPageState --> ScatterPainter : 描画
+_PhotoRegisterPageState ..> Camera : ライブプレビュー/撮影
+_PhotoRegisterPageState ..> LocationService : estimate()/register()
+ScatterPainter o-- NodePoint
+
+LocationService "1" o-- "18" BaseNode
+LocationService ..> NodePoint : 生成
+LocationService ..> EstimationResult : 生成
+LocationService ..> SQLite : embeddings表
+LocationService ..> ImageLib : 記述子抽出
+
+@enduml

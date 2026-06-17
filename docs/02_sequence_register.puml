@@ -1,0 +1,60 @@
+@startuml sequence_register
+title シーケンス図 — 新しい写真の位置登録フロー
+
+actor ユーザー as User
+participant "GraphPage\n(_GraphPageState)" as Graph
+participant "PhotoRegisterPage\n(_State)" as Page
+participant "LocationService" as Svc
+participant "image\n(記述子)" as Desc
+participant "camera" as Cam
+database "SQLite\nembeddings" as DB
+
+== 画面遷移 ==
+User -> Graph : ノード選択 →「新しい写真を登録する」
+activate Graph
+Graph -> Svc : baseNodeByImage(image)
+Svc --> Graph : BaseNode(id, name)
+Graph -> Svc : init()  (埋め込み/PCA/DB準備)
+activate Svc
+Svc -> Desc : 18ノード画像の記述子抽出 (82次元)
+Svc -> Svc : _buildPca() べき乗法で上位2主成分
+Svc -> DB : 既存ノード未登録なら挿入 (id 0..17)
+Svc --> Graph : 完了
+deactivate Svc
+Graph -> Page : push(targetNodeId, targetNodeName)
+deactivate Graph
+activate Page
+Page -> Cam : availableCameras() / initialize()
+Cam --> Page : ライブプレビュー開始
+Page -> Svc : basePoints (散布図用)
+Svc --> Page : List<NodePoint>
+Page -> User : カメラ + 散布図 + 「対象ノード」見出し表示
+
+== 撮影・座標推定 ==
+User -> Page : 「写真を撮影して位置を計算」
+Page -> Cam : takePicture()
+Cam --> Page : 静止画ファイル
+Page -> Svc : estimate(bytes)
+activate Svc
+Svc -> Desc : _featureFromBytes() 82次元記述子
+Svc -> Svc : _project() PCA基底へ射影
+Svc --> Page : EstimationResult(vector, pcaX, pcaY)
+deactivate Svc
+Page -> User : 散布図に推定点(赤リング)表示 / ボタン切替
+
+== DB登録 ==
+User -> Page : 「この場所をDBに登録」
+Page -> Svc : register(name, est)
+activate Svc
+Svc -> Svc : ランダムID採番 (100 + microsec)
+note right of Svc
+  no10(本番): DBへ insert する
+  no09_test  : insert せず採番のみ
+end note
+Svc -> DB : insert(id, name, vector, pca_x, pca_y)
+Svc --> Page : NodePoint
+deactivate Svc
+Page -> User : SnackBar「DBに登録しました」
+deactivate Page
+
+@enduml

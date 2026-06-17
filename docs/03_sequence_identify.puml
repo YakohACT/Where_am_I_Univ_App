@@ -1,0 +1,32 @@
+@startuml sequence_identify
+title シーケンス図 — カメラで撮影して現在地を識別（DB蓄積分も使用）
+
+actor ユーザー as User
+participant "GraphPage\n(_GraphPageState)" as Graph
+participant "image_picker" as Picker
+participant "LocationService" as Svc
+participant "image\n(記述子)" as Desc
+database "SQLite\nembeddings" as DB
+
+User -> Graph : 右上のカメラボタンをタップ
+activate Graph
+Graph -> Picker : pickImage(source: camera)
+Picker --> Graph : 撮影画像 (XFile) ※キャンセル時 null
+Graph -> Svc : identifyFromDb(bytes)
+activate Svc
+Svc -> Desc : _featureFromBytes() 82次元記述子
+Svc -> Svc : z-score 標準化
+Svc -> DB : SELECT id, name, vector FROM embeddings
+DB --> Svc : 全件（既存ノード id 0〜17 ＋ 撮影蓄積分 id≧100）
+loop DB行ごと
+  Svc -> Svc : 標準化してコサイン類似度を計算
+end
+Svc -> Svc : 最大類似度の1件を選択\n画像ファイル名を解決
+Svc --> Graph : IdentifyResult(id, name, image, similarity, isBase)
+deactivate Svc
+Graph -> Graph : image でグラフ上のノードを特定
+Graph -> User : 最類似ノードを選択状態に + バナー\n「推定地点: XX (類似度 nn.n% / 既存 or 蓄積 データ)」
+note right of Graph : バナーは5秒後に自動で消える
+deactivate Graph
+
+@enduml

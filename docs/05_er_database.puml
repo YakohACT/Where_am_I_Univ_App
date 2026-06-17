@@ -1,0 +1,26 @@
+@startuml er_database
+title ER図 — SQLite (node_data.db)
+
+skinparam linetype ortho
+
+entity "embeddings" as e {
+  * id : INTEGER <<PK>>
+  --
+  既存ノード: 0〜17
+  撮影追加分: 100 + microsec (大きな整数)
+  --
+  name   : TEXT      -- ノード名 (例: EV, 廊下1)
+  vector : TEXT      -- 82次元記述子をカンマ区切り保存
+  pca_x  : REAL      -- PCA第1主成分への射影
+  pca_y  : REAL      -- PCA第2主成分への射影
+}
+
+note bottom of e
+  vector の内訳 (計82次元):
+   ・カラーヒストグラム  6bin x RGB = 18
+   ・ブロック平均RGB     4x4 x 3   = 48
+   ・ブロック輝度標準偏差 4x4       = 16
+  Python(view_db.py)は閲覧専用。
+end note
+
+@enduml

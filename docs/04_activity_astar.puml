@@ -1,0 +1,42 @@
+@startuml activity_astar
+title アクティビティ図 — A* による経路探索
+
+start
+:ノードをタップして選択;
+if (始点/目的地どちらを設定?) then (始点)
+  :_setStart(node);
+else (目的地)
+  :_setGoal(node);
+endif
+:_updatePath();
+
+if (始点と目的地が両方セット?) then (はい)
+  :A* 探索開始 (_astar);
+  :隣接リスト adj と座標 posMap を構築;
+  :gScore[start]=0, fScore=h(start,goal);
+  :open集合(SplayTreeSet)に start を追加;
+  while (open集合が空でない?) is (はい)
+    :f値が最小のノード current を取得;
+    if (current == goal?) then (はい)
+      :cameFrom を辿って経路復元;
+      :経路リストを返す;
+      stop
+    endif
+    :current を open から除去;
+    while (current の隣接ノード nb) is (各nb)
+      :仮 g値 tg = gScore[current] + 距離;
+      if (tg < gScore[nb]?) then (はい)
+        :cameFrom[nb]=current;
+        :gScore[nb]=tg, fScore[nb]=tg+h(nb,goal);
+        :nb を open に追加;
+      endif
+    endwhile (完了)
+  endwhile (空)
+  :経路なし(空リスト)を返す;
+  stop
+else (いいえ)
+  :経路をクリア;
+  stop
+endif
+
+@enduml
