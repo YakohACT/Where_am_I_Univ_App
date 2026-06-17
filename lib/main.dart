@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'location_service.dart';
 import 'photo_register_page.dart';
 import 'wifi_service.dart';
+import 'data_manager_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -345,6 +346,16 @@ class _GraphPageState extends State<GraphPage> {
           ),
         ),
         actions: [
+          IconButton(
+            tooltip: 'データ管理',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                    builder: (_) => const DataManagerPage()),
+              );
+            },
+            icon: const Icon(Icons.storage_outlined, color: Colors.black87),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: GestureDetector(

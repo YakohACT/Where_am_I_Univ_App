@@ -447,6 +447,54 @@ class LocationService {
     );
   }
 
+  /// 画像ファイル（バイト列）から埋め込みを計算してDBへ登録する。
+  /// スマホのギャラリー画像のアップロードに使用。WiFiは付かない（画像のみ）。
+  /// 解析できなければ null を返す。
+  Future<NodePoint?> addFromImage({
+    required String name,
+    required Uint8List bytes,
+    Map<String, int>? wifi,
+  }) async {
+    await init();
+    final est = estimate(bytes);
+    if (est == null) return null;
+    return register(name: name, est: est, wifi: wifi);
+  }
+
+  /// DBの全エントリを一覧（データ管理画面用）。
+  Future<List<DbEntry>> listEntries() async {
+    await init();
+    final rows = await _db!.query(
+      'embeddings',
+      columns: ['id', 'name', 'pca_x', 'pca_y', 'wifi'],
+      orderBy: 'id',
+    );
+    return rows.map((r) {
+      final id = r['id'] as int;
+      final wifi = _decodeWifi(r['wifi'] as String?);
+      return DbEntry(
+        id: id,
+        name: (r['name'] as String?) ?? '',
+        pcaX: (r['pca_x'] as num?)?.toDouble() ?? 0,
+        pcaY: (r['pca_y'] as num?)?.toDouble() ?? 0,
+        isBase: id < 100,
+        wifiCount: wifi.length,
+      );
+    }).toList();
+  }
+
+  /// 指定IDのエントリを削除。
+  Future<void> deleteEntry(int id) async {
+    await init();
+    await _db!.delete('embeddings', where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// 収集データ（id≧100）を一括削除。削除件数を返す（既存ノードは残す）。
+  Future<int> deleteAllCollected() async {
+    await init();
+    return _db!.delete('embeddings', where: 'id >= 100');
+  }
+
   /// 画像 ＋ WiFi指紋 を併用してDB全件と照合し、最類似1件を返す（option B）。
   ///
   /// - 画像: z-score標準化後のコサイン類似度 → [0,1] に変換
@@ -563,6 +611,24 @@ class EstimationResult {
     required this.vector,
     required this.pcaX,
     required this.pcaY,
+  });
+}
+
+/// データ管理画面に表示するDBエントリ1件
+class DbEntry {
+  final int id;
+  final String name;
+  final double pcaX;
+  final double pcaY;
+  final bool isBase;   // 既存ノード(true) / 収集データ(false)
+  final int wifiCount; // 保存されたWiFi指紋のAP数（0なら画像のみ）
+  const DbEntry({
+    required this.id,
+    required this.name,
+    required this.pcaX,
+    required this.pcaY,
+    required this.isBase,
+    required this.wifiCount,
   });
 }
 
