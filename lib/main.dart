@@ -103,6 +103,14 @@ class _GraphPageState extends State<GraphPage> {
     GraphEdge('entrance','lobby2'),
   ];
 
+  // フロアごとのグラフ。現状は1階のみデータあり（2〜4階は後日追加）。
+  static const Map<int, List<GraphNode>> nodesByFloor = {1: nodes};
+  static const Map<int, List<GraphEdge>> edgesByFloor = {1: edges};
+
+  int _floor = 1; // 表示中の階層 (1〜4)
+  List<GraphNode> get _nodes => nodesByFloor[_floor] ?? const [];
+  List<GraphEdge> get _edges => edgesByFloor[_floor] ?? const [];
+
   GraphNode? _selectedNode;
   String?    _startNodeId;
   String?    _goalNodeId;
@@ -161,13 +169,18 @@ class _GraphPageState extends State<GraphPage> {
         return;
       }
 
-      // 一致したDB行をグラフ上のノードへ対応付け（画像ファイル名で照合）
+      // 一致したDB行をグラフ上のノードへ対応付け（全フロアから画像で照合）
       GraphNode? best;
-      for (final n in nodes) {
-        if (n.image == match.image) {
-          best = n;
-          break;
+      int? bestFloor;
+      for (final entry in nodesByFloor.entries) {
+        for (final n in entry.value) {
+          if (n.image == match.image) {
+            best = n;
+            bestFloor = entry.key;
+            break;
+          }
         }
+        if (best != null) break;
       }
 
       final percent = (match.similarity.clamp(0.0, 1.0) * 100);
@@ -181,7 +194,10 @@ class _GraphPageState extends State<GraphPage> {
 
       setState(() {
         _identifying = false;
-        if (best != null) _selectedNode = best; // 最類似ノードを選択状態に
+        if (best != null) {
+          if (bestFloor != null) _floor = bestFloor; // 該当フロアへ切替
+          _selectedNode = best; // 最類似ノードを選択状態に
+        }
         _matchBanner =
             '推定地点: $label ($floor)  (一致度 ${percent.toStringAsFixed(1)}% / $source / $method)';
       });
@@ -223,17 +239,17 @@ class _GraphPageState extends State<GraphPage> {
 
   // ─── A* アルゴリズム ─────────────────────────────────
   List<String> _astar(String start, String goal) {
-    final posMap = {for (final n in nodes) n.id: n.position};
-    final adj = <String, List<String>>{for (final n in nodes) n.id: []};
-    for (final e in edges) {
+    final posMap = {for (final n in _nodes) n.id: n.position};
+    final adj = <String, List<String>>{for (final n in _nodes) n.id: []};
+    for (final e in _edges) {
       adj[e.from]!.add(e.to);
       adj[e.to]!.add(e.from);
     }
 
     double h(String a, String b) => (posMap[a]! - posMap[b]!).distance;
 
-    final gScore = <String, double>{for (final n in nodes) n.id: double.infinity};
-    final fScore = <String, double>{for (final n in nodes) n.id: double.infinity};
+    final gScore = <String, double>{for (final n in _nodes) n.id: double.infinity};
+    final fScore = <String, double>{for (final n in _nodes) n.id: double.infinity};
     final cameFrom = <String, String>{};
 
     gScore[start] = 0;
@@ -277,7 +293,7 @@ class _GraphPageState extends State<GraphPage> {
     const hitR = 24.0;
     GraphNode? found;
     double minDist = double.infinity;
-    for (final n in nodes) {
+    for (final n in _nodes) {
       final p = Offset(n.position.dx * size.width, n.position.dy * size.height);
       final d = (tap - p).distance;
       if (d < hitR && d < minDist) {
@@ -327,6 +343,21 @@ class _GraphPageState extends State<GraphPage> {
       _path = [];
     }
   }
+
+  // 階層を切り替える（選択・経路はクリア。階をまたぐ経路探索は未対応）
+  void _changeFloor(int floor) {
+    if (floor < 1 || floor > 4 || floor == _floor) return;
+    setState(() {
+      _floor = floor;
+      _selectedNode = null;
+      _startNodeId = null;
+      _goalNodeId = null;
+      _path = [];
+    });
+  }
+
+  // 階段で上下の階へ移動（一旦1階の階段のみ対応）
+  void _moveByStair(int delta) => _changeFloor(_floor + delta);
 
   // ─── ビルド ──────────────────────────────────────────
   @override
@@ -388,27 +419,51 @@ class _GraphPageState extends State<GraphPage> {
               Expanded(
                 child: Container(
                   color: const Color(0xFFEEEFF5),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final size = Size(
-                        constraints.maxWidth,
-                        constraints.maxHeight,
-                      );
-                      return GestureDetector(
-                        onTapUp: (d) => _onTap(d, size),
-                        child: CustomPaint(
-                          size: size,
-                          painter: GraphPainter(
-                            nodes: nodes,
-                            edges: edges,
-                            selectedNodeId: _selectedNode?.id,
-                            startNodeId: _startNodeId,
-                            goalNodeId: _goalNodeId,
-                            path: _path,
+                  child: Stack(
+                    children: [
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final size = Size(
+                            constraints.maxWidth,
+                            constraints.maxHeight,
+                          );
+                          return GestureDetector(
+                            onTapUp: (d) => _onTap(d, size),
+                            child: CustomPaint(
+                              size: size,
+                              painter: GraphPainter(
+                                nodes: _nodes,
+                                edges: _edges,
+                                selectedNodeId: _selectedNode?.id,
+                                startNodeId: _startNodeId,
+                                goalNodeId: _goalNodeId,
+                                path: _path,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      // 空フロアのプレースホルダ
+                      if (_nodes.isEmpty)
+                        Center(
+                          child: Text(
+                            '$_floor階のデータはまだありません',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: Colors.black45,
+                            ),
                           ),
                         ),
-                      );
-                    },
+                      // ── 左上: 階層選択プルダウン ──
+                      Positioned(
+                        top: 12,
+                        left: 12,
+                        child: _FloorSelector(
+                          floor: _floor,
+                          onChanged: _changeFloor,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -418,10 +473,16 @@ class _GraphPageState extends State<GraphPage> {
                 const Divider(height: 1, thickness: 1, color: Colors.black26),
                 _DetailPanel(
                   node: _selectedNode!,
+                  floor: _floor,
                   capturedImagePath: _capturedImages[_selectedNode!.id],
                   onCapture:  () => _openPhotoRegister(_selectedNode!),
                   onSetStart: () => _setStart(_selectedNode!),
                   onSetGoal:  () => _setGoal(_selectedNode!),
+                  isStair: _selectedNode!.id == 'stair',
+                  canGoUp: _floor < 4,
+                  canGoDown: _floor > 1,
+                  onStairUp: () => _moveByStair(1),
+                  onStairDown: () => _moveByStair(-1),
                 ),
               ],
             ],
@@ -502,21 +563,79 @@ class _ResultBanner extends StatelessWidget {
   }
 }
 
+// ─── 階層選択プルダウン（左上）────────────────────────────────
+
+class _FloorSelector extends StatelessWidget {
+  final int floor;
+  final ValueChanged<int> onChanged;
+  const _FloorSelector({required this.floor, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.black26),
+          boxShadow: const [
+            BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.layers_outlined,
+                size: 18, color: Color(0xFF4A90E2)),
+            const SizedBox(width: 4),
+            DropdownButton<int>(
+              value: floor,
+              isDense: true,
+              underline: const SizedBox.shrink(),
+              items: const [1, 2, 3, 4]
+                  .map((f) =>
+                      DropdownMenuItem(value: f, child: Text('$f階')))
+                  .toList(),
+              onChanged: (f) {
+                if (f != null) onChanged(f);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ─── 詳細パネル Widget ────────────────────────────────────────
 
 class _DetailPanel extends StatelessWidget {
   final GraphNode node;
+  final int floor; // 現在の階層（z）
   final String? capturedImagePath; // カメラ撮影済みなら優先表示
   final VoidCallback onCapture;
   final VoidCallback onSetStart;
   final VoidCallback onSetGoal;
+  final bool isStair;       // 階段ノードか
+  final bool canGoUp;       // 上の階へ移動可能か
+  final bool canGoDown;     // 下の階へ移動可能か
+  final VoidCallback onStairUp;
+  final VoidCallback onStairDown;
 
   const _DetailPanel({
     required this.node,
+    required this.floor,
     required this.capturedImagePath,
     required this.onCapture,
     required this.onSetStart,
     required this.onSetGoal,
+    required this.isStair,
+    required this.canGoUp,
+    required this.canGoDown,
+    required this.onStairUp,
+    required this.onStairDown,
   });
 
   @override
@@ -588,15 +707,39 @@ class _DetailPanel extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                // ID & 座標
+                // ID ｜ 階層 ｜ 座標(x,y,z)
                 Text(
-                  'ID:${node.id} | 座標:($cx,$cy)',
+                  'ID:${node.id} ｜ 階層:${LocationService.floorLabel(floor.toDouble())} ｜ 座標:($cx,$cy,$floor)',
                   style: const TextStyle(
-                    fontSize: 18,
+                    fontSize: 16,
                     color: Colors.black54,
                   ),
                 ),
                 const SizedBox(height: 18),
+
+                // 階段ノードなら上下の階への移動ボタン
+                if (isStair) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _ActionButton(
+                          label: '🔼 上の階へ',
+                          color: const Color(0xFF7E57C2),
+                          onTap: canGoUp ? onStairUp : null,
+                        ),
+                      ),
+                      const SizedBox(width: 11),
+                      Expanded(
+                        child: _ActionButton(
+                          label: '🔽 下の階へ',
+                          color: const Color(0xFF7E57C2),
+                          onTap: canGoDown ? onStairDown : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 11),
+                ],
 
                 // ボタン：新しい写真を登録する
                 _ActionButton(
@@ -634,7 +777,7 @@ class _DetailPanel extends StatelessWidget {
 class _ActionButton extends StatelessWidget {
   final String label;
   final Color color;
-  final VoidCallback onTap;
+  final VoidCallback? onTap; // null で無効化（階段の上下移動など）
 
   const _ActionButton({
     required this.label,
@@ -651,6 +794,7 @@ class _ActionButton extends StatelessWidget {
         onPressed: onTap,
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
+          disabledBackgroundColor: Colors.black12,
           elevation: 0,
           shape: const StadiumBorder(),
           padding: const EdgeInsets.symmetric(horizontal: 8),
