@@ -1,30 +1,41 @@
-// This is a basic Flutter widget test.
+// 既存ノード定義（プラグイン非依存）の健全性テスト。
 //
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
+// 注: アプリ本体(MyApp)を pump すると LocationService.init() が
+// sqflite / rootBundle などのプラットフォームプラグインを呼び、デバイスの無い
+// CI(flutter test) では失敗する。そのため、ここではプラグイン不要で決定的な
+// 純Dartロジック（baseNodes と baseNodeByImage）のみを検証する。
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:astar_pathfinder/main.dart';
+import 'package:astar_pathfinder/location_service.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('LocationService.baseNodes', () {
+    test('既存ノードは18件ある', () {
+      expect(LocationService.baseNodes.length, 18);
+    });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    test('IDは 0〜17 で重複なし', () {
+      final ids = LocationService.baseNodes.map((b) => b.id).toList();
+      expect(ids.toSet().length, 18, reason: 'IDが重複している');
+      expect(ids.reduce((a, b) => a < b ? a : b), 0);
+      expect(ids.reduce((a, b) => a > b ? a : b), 17);
+    });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    test('画像ファイル名は重複なし', () {
+      final images = LocationService.baseNodes.map((b) => b.image).toList();
+      expect(images.toSet().length, 18, reason: '画像名が重複している');
+    });
+  });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  group('LocationService.baseNodeByImage', () {
+    test('既知の画像から正しいノードを引ける', () {
+      final ev = LocationService.baseNodeByImage('ev.png');
+      expect(ev, isNotNull);
+      expect(ev!.id, 1);
+      expect(ev.name, 'EV');
+    });
+
+    test('未知の画像では null を返す', () {
+      expect(LocationService.baseNodeByImage('unknown.png'), isNull);
+    });
   });
 }
