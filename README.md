@@ -14,3 +14,17 @@
 
 ### Wifiについて
 Wifi ESSIフィンガープリントを利用します。WifiのSSIDや電波強度をSQLに保存し、迷った場所でWifiを参照し、SQLに登録されているものに近い場所を特定します。(大学がWifiを買い替えたりSSIDを変更しない前提)
+
+## 使用言語,ツール
+- Dart アプリの制御とUI
+- Python DB閲覧と編集、機械学習
+  - sqlite3
+  - pandas
+  - numpy
+  - PIL
+- Kotlin Androidホスト
+- Swift iOSホスト
+- Java プラグインの登録
+- SQLite DB
+- Flutter
+- Git,GitHub,GitHub Actions
