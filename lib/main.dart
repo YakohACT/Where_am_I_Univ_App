@@ -173,6 +173,7 @@ class _GraphPageState extends State<GraphPage> {
       final percent = (match.similarity.clamp(0.0, 1.0) * 100);
       final label = best?.label ?? match.name;
       final source = match.isBase ? '既存' : '蓄積';
+      final floor = LocationService.floorLabel(match.z);
       // 画像/WiFiの内訳（WiFi併用時のみ）
       final method = match.usedWifi
           ? '画像${(match.imageSim * 100).toStringAsFixed(0)}% + WiFi${((match.wifiSim ?? 0) * 100).toStringAsFixed(0)}%'
@@ -182,7 +183,7 @@ class _GraphPageState extends State<GraphPage> {
         _identifying = false;
         if (best != null) _selectedNode = best; // 最類似ノードを選択状態に
         _matchBanner =
-            '推定地点: $label  (一致度 ${percent.toStringAsFixed(1)}% / $source / $method)';
+            '推定地点: $label ($floor)  (一致度 ${percent.toStringAsFixed(1)}% / $source / $method)';
       });
 
       // 一定時間後にバナーを消す

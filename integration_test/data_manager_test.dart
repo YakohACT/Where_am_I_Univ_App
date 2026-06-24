@@ -18,18 +18,23 @@ void main() {
     final data = await rootBundle.load('lib/images/ev.png');
     final bytes = data.buffer.asUint8List();
 
-    // ① アップロード（addFromImage）
-    final point = await svc.addFromImage(name: 'TEST_UPLOAD', bytes: bytes);
+    // 既存データは全て1階(z=1)であること
+    var entries = await svc.listEntries();
+    expect(entries.where((e) => e.isBase).every((e) => e.z == 1.0), true,
+        reason: '既存ノードのzは全て1であるべき');
+
+    // ① アップロード（addFromImage）— 2階(z=2)で登録
+    final point =
+        await svc.addFromImage(name: 'TEST_UPLOAD', bytes: bytes, z: 2.0);
     expect(point, isNotNull, reason: 'アップロードに失敗');
     expect(point!.id >= 100, true, reason: '収集データIDは100以上であるべき');
 
-    // ② 一覧に出る & 既存ノードは18件
-    var entries = await svc.listEntries();
-    expect(
-      entries.any((e) => e.id == point.id && e.name == 'TEST_UPLOAD'),
-      true,
-      reason: 'アップロードした行が一覧に無い',
-    );
+    // ② 一覧に出る & z=2 が保存されている & 既存ノードは18件
+    entries = await svc.listEntries();
+    final matches = entries.where((e) => e.id == point.id).toList();
+    expect(matches.length, 1, reason: 'アップロードした行が一覧に無い');
+    expect(matches.first.name, 'TEST_UPLOAD');
+    expect(matches.first.z, 2.0, reason: 'z(階層)が保存されていない');
     expect(entries.where((e) => e.isBase).length, 18,
         reason: '既存ノードが18件でない');
 

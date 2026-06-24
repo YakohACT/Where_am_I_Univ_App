@@ -42,9 +42,11 @@ class _DataManagerPageState extends State<DataManagerPage> {
     if (files.isEmpty) return;
     if (!mounted) return;
 
-    // 登録名を選択（既存ノード名から選ぶ or 自由入力）
-    final name = await _askName();
-    if (name == null || name.isEmpty) return;
+    // 登録名と階層を選択（既存ノード名から選ぶ or 自由入力）
+    final choice = await _askNameAndFloor();
+    if (choice == null || choice.name.isEmpty) return;
+    final name = choice.name;
+    final floor = choice.floor;
 
     setState(() {
       _busy = true;
@@ -56,7 +58,7 @@ class _DataManagerPageState extends State<DataManagerPage> {
       try {
         final bytes = await File(files[i].path).readAsBytes();
         final res = await LocationService.instance
-            .addFromImage(name: name, bytes: bytes);
+            .addFromImage(name: name, bytes: bytes, z: floor);
         if (res != null) {
           ok++;
         } else {
@@ -75,25 +77,27 @@ class _DataManagerPageState extends State<DataManagerPage> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('アップロード完了: 成功 $ok 件 / 失敗 $fail 件（名前: $name）'),
+        content: Text(
+            'アップロード完了: 成功 $ok 件 / 失敗 $fail 件（名前: $name / ${LocationService.floorLabel(floor)}）'),
         duration: const Duration(seconds: 3),
       ),
     );
   }
 
-  // 登録名を選ぶダイアログ（既存ノード名のドロップダウン＋自由入力）
-  Future<String?> _askName() async {
+  // 登録名と階層を選ぶダイアログ（既存ノード名のドロップダウン＋自由入力＋階層）
+  Future<({String name, double floor})?> _askNameAndFloor() async {
     final names = LocationService.baseNodes.map((b) => b.name).toList();
     String? selected = names.first;
+    double floor = 1.0;
     final custom = TextEditingController();
 
-    return showDialog<String>(
+    return showDialog<({String name, double floor})>(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setLocal) {
             return AlertDialog(
-              title: const Text('登録する場所の名前'),
+              title: const Text('登録する場所の名前と階層'),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -118,6 +122,26 @@ class _DataManagerPageState extends State<DataManagerPage> {
                     ),
                     onChanged: (_) => setLocal(() {}),
                   ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      const Icon(Icons.layers_outlined,
+                          size: 18, color: Color(0xFF4A90E2)),
+                      const SizedBox(width: 6),
+                      const Text('階層: '),
+                      DropdownButton<double>(
+                        value: floor,
+                        items: LocationService.floorOptions
+                            .map((z) => DropdownMenuItem(
+                                  value: z,
+                                  child: Text(LocationService.floorLabel(z)),
+                                ))
+                            .toList(),
+                        onChanged: (v) =>
+                            setLocal(() => floor = v ?? 1.0),
+                      ),
+                    ],
+                  ),
                 ],
               ),
               actions: [
@@ -129,8 +153,8 @@ class _DataManagerPageState extends State<DataManagerPage> {
                   onPressed: () {
                     final name = custom.text.trim().isNotEmpty
                         ? custom.text.trim()
-                        : selected;
-                    Navigator.pop(ctx, name);
+                        : (selected ?? '');
+                    Navigator.pop(ctx, (name: name, floor: floor));
                   },
                   child: const Text('決定'),
                 ),
@@ -313,7 +337,8 @@ class _DataManagerPageState extends State<DataManagerPage> {
       title: Text(e.name,
           style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: Text(
-        'ID: ${e.id} ｜ pca(${e.pcaX.toStringAsFixed(1)}, ${e.pcaY.toStringAsFixed(1)}) ｜ $wifi'
+        'ID: ${e.id} ｜ ${LocationService.floorLabel(e.z)} ｜ '
+        'pca(${e.pcaX.toStringAsFixed(1)}, ${e.pcaY.toStringAsFixed(1)}) ｜ $wifi'
         '${e.isBase ? ' ｜ 既存' : ''}',
         style: const TextStyle(fontSize: 12),
       ),

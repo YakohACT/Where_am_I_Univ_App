@@ -78,6 +78,18 @@ class LocationService {
   // 既存ノードの散布図座標（メモリ保持）
   final List<NodePoint> _basePoints = [];
 
+  /// 階層Zを表示用ラベルに変換（1→「1階」, 1.5→「1↔2階(階段)」）
+  static String floorLabel(double z) {
+    if (z == z.roundToDouble()) return '${z.toInt()}階';
+    final lower = z.floor();
+    return '$lower↔${lower + 1}階(階段)';
+  }
+
+  /// 登録/アップロード時に選べる階層の候補（1階〜5階＋各階段）
+  static const List<double> floorOptions = [
+    1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0,
+  ];
+
   /// アプリ名等から画像ファイル名で既存ノードを引く
   static BaseNode? baseNodeByImage(String image) {
     for (final b in baseNodes) {
@@ -356,8 +368,9 @@ class LocationService {
     final path = p.join(dir, 'node_data.db');
     _db = await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
+        // z: 階層（1=1階, 2=2階, 1.5=1↔2階の階段, ...）。既定は1階。
         await db.execute('''
           CREATE TABLE embeddings(
             id INTEGER PRIMARY KEY,
@@ -365,7 +378,8 @@ class LocationService {
             vector TEXT,
             pca_x REAL,
             pca_y REAL,
-            wifi TEXT
+            wifi TEXT,
+            z REAL DEFAULT 1
           )
         ''');
       },
@@ -373,6 +387,10 @@ class LocationService {
         // v1 → v2: WiFiフィンガープリント列を追加（既存データは保持）
         if (oldV < 2) {
           await db.execute('ALTER TABLE embeddings ADD COLUMN wifi TEXT');
+        }
+        // v2 → v3: 階層Z軸列を追加。既存データは全て1階(z=1)とする
+        if (oldV < 3) {
+          await db.execute('ALTER TABLE embeddings ADD COLUMN z REAL DEFAULT 1');
         }
       },
     );
@@ -392,6 +410,7 @@ class LocationService {
             'vector': baseVectors[i].map((e) => e.toStringAsFixed(6)).join(','),
             'pca_x': proj.pcaX,
             'pca_y': proj.pcaY,
+            'z': 1.0, // 既存ノードは全て1階
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
@@ -422,6 +441,7 @@ class LocationService {
     required String name,
     required EstimationResult est,
     Map<String, int>? wifi,
+    double z = 1.0, // 階層（1=1階, 1.5=1↔2階の階段, 2=2階, ...）
   }) async {
     // 適当に割り振るID（既存 id<100 と衝突しない大きな正の整数）
     final id = 100 +
@@ -435,6 +455,7 @@ class LocationService {
         'pca_x': est.pcaX,
         'pca_y': est.pcaY,
         'wifi': (wifi == null || wifi.isEmpty) ? null : jsonEncode(wifi),
+        'z': z,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -454,11 +475,12 @@ class LocationService {
     required String name,
     required Uint8List bytes,
     Map<String, int>? wifi,
+    double z = 1.0,
   }) async {
     await init();
     final est = estimate(bytes);
     if (est == null) return null;
-    return register(name: name, est: est, wifi: wifi);
+    return register(name: name, est: est, wifi: wifi, z: z);
   }
 
   /// DBの全エントリを一覧（データ管理画面用）。
@@ -466,7 +488,7 @@ class LocationService {
     await init();
     final rows = await _db!.query(
       'embeddings',
-      columns: ['id', 'name', 'pca_x', 'pca_y', 'wifi'],
+      columns: ['id', 'name', 'pca_x', 'pca_y', 'wifi', 'z'],
       orderBy: 'id',
     );
     return rows.map((r) {
@@ -477,6 +499,7 @@ class LocationService {
         name: (r['name'] as String?) ?? '',
         pcaX: (r['pca_x'] as num?)?.toDouble() ?? 0,
         pcaY: (r['pca_y'] as num?)?.toDouble() ?? 0,
+        z: (r['z'] as num?)?.toDouble() ?? 1.0,
         isBase: id < 100,
         wifiCount: wifi.length,
       );
@@ -518,7 +541,7 @@ class LocationService {
 
     final rows = await _db!.query(
       'embeddings',
-      columns: ['id', 'name', 'vector', 'wifi'],
+      columns: ['id', 'name', 'vector', 'wifi', 'z'],
     );
     IdentifyResult? best;
     double bestScore = -2.0;
@@ -556,6 +579,7 @@ class LocationService {
           imageSim: imgSim,
           wifiSim: usedWifi ? wifiSim : null,
           usedWifi: usedWifi,
+          z: (r['z'] as num?)?.toDouble() ?? 1.0,
           isBase: id < 100,
         );
       }
@@ -620,6 +644,7 @@ class DbEntry {
   final String name;
   final double pcaX;
   final double pcaY;
+  final double z;      // 階層（1=1階, 1.5=1↔2階の階段, 2=2階, ...）
   final bool isBase;   // 既存ノード(true) / 収集データ(false)
   final int wifiCount; // 保存されたWiFi指紋のAP数（0なら画像のみ）
   const DbEntry({
@@ -627,6 +652,7 @@ class DbEntry {
     required this.name,
     required this.pcaX,
     required this.pcaY,
+    required this.z,
     required this.isBase,
     required this.wifiCount,
   });
@@ -641,6 +667,7 @@ class IdentifyResult {
   final double imageSim; // 画像のみの類似度 [0,1]
   final double? wifiSim; // WiFiのみの類似度 [0,1]（未使用なら null）
   final bool usedWifi;   // この結果でWiFiを併用したか
+  final double z;        // 階層（1=1階, 1.5=階段, 2=2階, ...）
   final bool isBase;     // 既存ノードか（true）/ 撮影追加分か（false）
   const IdentifyResult({
     required this.id,
@@ -650,6 +677,7 @@ class IdentifyResult {
     required this.imageSim,
     required this.wifiSim,
     required this.usedWifi,
+    required this.z,
     required this.isBase,
   });
 }

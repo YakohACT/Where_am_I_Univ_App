@@ -31,6 +31,7 @@ class _PhotoRegisterPageState extends State<PhotoRegisterPage> {
   EstimationResult? _est;     // 推定結果
   NodePoint? _estPoint;       // 散布図に出す推定点
   Map<String, int> _wifi = {}; // 撮影地点のWiFi指紋(bssid→rssi)
+  double _floor = 1.0;         // 階層Z（1=1階, 1.5=階段, 2=2階, ...）
   bool _processing = false;
   bool _saved = false;
 
@@ -136,6 +137,7 @@ class _PhotoRegisterPageState extends State<PhotoRegisterPage> {
       name: widget.targetNodeName,
       est: _est!,
       wifi: _wifi,
+      z: _floor,
     );
     if (!mounted) return;
     setState(() {
@@ -144,10 +146,11 @@ class _PhotoRegisterPageState extends State<PhotoRegisterPage> {
       _estPoint = point;
     });
     final wifiMsg = _wifi.isEmpty ? '画像のみ' : 'WiFi ${_wifi.length}件併用';
+    final floorMsg = LocationService.floorLabel(_floor);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-            'DBに登録しました（ID: ${point.id} / ${point.name} / $wifiMsg）'),
+            'DBに登録しました（ID: ${point.id} / ${point.name} / $floorMsg / $wifiMsg）'),
         duration: const Duration(seconds: 3),
       ),
     );
@@ -218,6 +221,31 @@ class _PhotoRegisterPageState extends State<PhotoRegisterPage> {
                       ],
                     ),
                   ),
+                  // 階層（Z軸）選択
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.layers_outlined,
+                          size: 18, color: Color(0xFF4A90E2)),
+                      const SizedBox(width: 6),
+                      const Text('階層: ', style: TextStyle(fontSize: 14)),
+                      DropdownButton<double>(
+                        value: _floor,
+                        isDense: true,
+                        items: LocationService.floorOptions
+                            .map((z) => DropdownMenuItem(
+                                  value: z,
+                                  child: Text(LocationService.floorLabel(z)),
+                                ))
+                            .toList(),
+                        onChanged: _saved
+                            ? null
+                            : (v) => setState(() => _floor = v ?? 1.0),
+                      ),
+                    ],
+                  ),
+
                   // WiFi取得状況（撮影後のみ）
                   if (hasShot) ...[
                     const SizedBox(height: 6),
