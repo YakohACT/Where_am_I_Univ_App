@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'location_service.dart';
@@ -45,6 +46,31 @@ class GraphEdge {
   const GraphEdge(this.from, this.to);
 }
 
+// 各階の参照図の縦横（この比率でノードを配置）。
+// 1階は最初に提示された画像(758×496)。
+// 2〜4階はPDFのノード外接矩形(447.1×337.8)を基準に、画面いっぱいへ広げて配置。
+const Size kFloor1Diagram = Size(758.0, 496.0);
+const Size kPdfDiagram = Size(447.1, 337.8);
+
+const Map<int, Size> floorDiagram = {
+  1: kFloor1Diagram,
+  2: kPdfDiagram,
+  3: kPdfDiagram,
+  4: kPdfDiagram,
+};
+
+/// 参照図基準の正規化座標(0〜1)を、参照図のアスペクト比を保ったまま
+/// 描画領域の中央にフィットさせてスクリーン座標へ変換する。
+/// （領域に合わせて座標を独立に引き伸ばさず、図どおりの「形」を維持）
+Offset mapNodeToScreen(Offset norm, Size size, Size diagram) {
+  final s = math.min(size.width / diagram.width, size.height / diagram.height);
+  final boxW = diagram.width * s;
+  final boxH = diagram.height * s;
+  final ox = (size.width - boxW) / 2;
+  final oy = (size.height - boxH) / 2;
+  return Offset(ox + norm.dx * boxW, oy + norm.dy * boxH);
+}
+
 // ─── GraphPage ───────────────────────────────────────────────
 
 class GraphPage extends StatefulWidget {
@@ -56,25 +82,27 @@ class GraphPage extends StatefulWidget {
 
 class _GraphPageState extends State<GraphPage> {
   // ノード定義
+  // 参照画像（ネットワーク図 758×496）のピクセル位置を正規化した座標。
+  // 画像の見た目どおりに配置する（描画はアスペクト比を保ってマップ）。
   static const List<GraphNode> nodes = [
-    GraphNode('exit',     '出口',   Offset(0.40, 0.30), 'exit.png'),
-    GraphNode('cross',    '交差点', Offset(0.40, 0.46), 'cr.png'),
-    GraphNode('sc',       'sc',     Offset(0.12, 0.46), 'sc.png'),
-    GraphNode('stair',    '階段',   Offset(0.34, 0.54), 'stair.png'),
-    GraphNode('ev',       'EV',     Offset(0.30, 0.60), 'ev.png'),
-    GraphNode('lobby2',   'ロビー2',Offset(0.42, 0.60), 'lobby2.png'),
-    GraphNode('wc',       'WC',     Offset(0.54, 0.60), 'wc.png'),
-    GraphNode('hall1',    '廊下1',  Offset(0.54, 0.46), 'corridor1.png'),
-    GraphNode('hall2',    '廊下2',  Offset(0.68, 0.46), 'corridor2.png'),
-    GraphNode('hall3',    '廊下3',  Offset(0.82, 0.46), 'corridor3.png'),
-    GraphNode('hall4',    '廊下4',  Offset(0.94, 0.46), 'corridor4.png'),
-    GraphNode('os',       'os',     Offset(0.68, 0.34), 'os.png'),
-    GraphNode('big',      '大講義', Offset(0.94, 0.34), 'lc.png'),
-    GraphNode('mid',      '中講義', Offset(0.94, 0.62), 'mc.png'),
-    GraphNode('ic',       'ic',     Offset(0.20, 0.60), 'ic.png'),
-    GraphNode('ea',       'ea',     Offset(0.13, 0.68), 'ea.png'),
-    GraphNode('lobby1',   'ロビー1',Offset(0.28, 0.68), 'lobby1.png'),
-    GraphNode('entrance', '入口',   Offset(0.40, 0.74), 'entrance.png'),
+    GraphNode('exit',     '出口',   Offset(0.362, 0.151), 'exit.png'),
+    GraphNode('cross',    '交差点', Offset(0.362, 0.444), 'cr.png'),
+    GraphNode('sc',       'sc',     Offset(0.095, 0.448), 'sc.png'),
+    GraphNode('stair1',   '階段1',  Offset(0.300, 0.548), 'stair.png'),
+    GraphNode('ev1',      'EV1',    Offset(0.237, 0.649), 'ev.png'),
+    GraphNode('lobby2',   'ロビー2',Offset(0.362, 0.649), 'lobby2.png'),
+    GraphNode('wc',       'WC',     Offset(0.499, 0.651), 'wc.png'),
+    GraphNode('hall1',    '廊下1',  Offset(0.507, 0.446), 'corridor1.png'),
+    GraphNode('hall2',    '廊下2',  Offset(0.631, 0.446), 'corridor2.png'),
+    GraphNode('hall3',    '廊下3',  Offset(0.763, 0.446), 'corridor3.png'),
+    GraphNode('hall4',    '廊下4',  Offset(0.897, 0.446), 'corridor4.png'),
+    GraphNode('os',       'os',     Offset(0.631, 0.238), 'os.png'),
+    GraphNode('big',      '大講義', Offset(0.897, 0.238), 'lc.png'),
+    GraphNode('mid',      '中講義', Offset(0.897, 0.649), 'mc.png'),
+    GraphNode('ic',       'ic',     Offset(0.161, 0.651), 'ic.png'),
+    GraphNode('ea',       'ea',     Offset(0.095, 0.849), 'ea.png'),
+    GraphNode('lobby1',   'ロビー1',Offset(0.237, 0.849), 'lobby1.png'),
+    GraphNode('entrance', '入口',   Offset(0.362, 0.948), 'entrance.png'),
   ];
 
   // エッジ定義
@@ -83,10 +111,10 @@ class _GraphPageState extends State<GraphPage> {
     GraphEdge('sc',      'cross'),
     GraphEdge('sc',      'ic'),
     GraphEdge('cross',   'hall1'),
-    GraphEdge('cross',   'stair'),
+    GraphEdge('cross',   'stair1'),
     GraphEdge('cross',   'lobby2'),
-    GraphEdge('stair',   'ev'),
-    GraphEdge('ev',      'lobby2'),
+    GraphEdge('stair1',  'ev1'),
+    GraphEdge('ev1',     'lobby2'),
     GraphEdge('lobby2',  'wc'),
     GraphEdge('lobby2',  'lobby1'),
     GraphEdge('hall1',   'hall2'),
@@ -97,19 +125,102 @@ class _GraphPageState extends State<GraphPage> {
     GraphEdge('hall4',   'mid'),
     GraphEdge('ic',      'ea'),
     GraphEdge('ic',      'lobby1'),
-    GraphEdge('ic',      'ev'),
+    GraphEdge('ic',      'ev1'),
     GraphEdge('ea',      'lobby1'),
     GraphEdge('lobby1',  'entrance'),
     GraphEdge('entrance','lobby2'),
   ];
 
-  // フロアごとのグラフ。現状は1階のみデータあり（2〜4階は後日追加）。
-  static const Map<int, List<GraphNode>> nodesByFloor = {1: nodes};
-  static const Map<int, List<GraphEdge>> edgesByFloor = {1: edges};
+  // ── 2階（PDFのノード外接矩形基準・画面いっぱいに配置）──
+  static const List<GraphNode> nodes2 = [
+    GraphNode('enshu',   '演習室', Offset(0.648, 0.080), 'enshu.png'),
+    GraphNode('hall5',   '廊下5',  Offset(0.080, 0.224), 'none.png'),
+    GraphNode('hall6',   '廊下6',  Offset(0.750, 0.224), 'none.png'),
+    GraphNode('shokogi', '小講義', Offset(0.081, 0.413), 'none.png'),
+    GraphNode('wc',      'WC2',    Offset(0.750, 0.431), 'wc.png'),
+    GraphNode('ev2',     'EV2',    Offset(0.278, 0.541), 'ev.png'),
+    GraphNode('lab2',    '研究室2',Offset(0.860, 0.567), 'none.png'),
+    GraphNode('hall4',   '廊下4',  Offset(0.083, 0.695), 'none.png'),
+    GraphNode('stair2',  '階段2',  Offset(0.750, 0.706), 'stair.png'),
+    GraphNode('lab1',    '研究室1',Offset(0.586, 0.860), 'none.png'),
+  ];
+  static const List<GraphEdge> edges2 = [
+    GraphEdge('hall4', 'stair2'),
+    GraphEdge('ev2',   'hall4'),
+    GraphEdge('shokogi','hall4'),
+    GraphEdge('hall5', 'shokogi'),
+    GraphEdge('hall6', 'wc'),
+    GraphEdge('wc',    'stair2'),
+    GraphEdge('hall5', 'hall6'),
+    GraphEdge('hall4', 'lab1'),
+    GraphEdge('stair2','lab1'),
+    GraphEdge('lab2',  'stair2'),
+    GraphEdge('enshu', 'hall6'),
+  ];
+
+  // ── 3階（PDFのノード外接矩形基準・画面いっぱいに配置）──
+  static const List<GraphNode> nodes3 = [
+    GraphNode('hall8',   '廊下8',  Offset(0.080, 0.224), 'none.png'),
+    GraphNode('hall9',   '廊下9',  Offset(0.750, 0.224), 'none.png'),
+    GraphNode('shokogi', '小講義', Offset(0.081, 0.413), 'none.png'),
+    GraphNode('wc',      'WC3',    Offset(0.750, 0.431), 'wc.png'),
+    GraphNode('ev3',     'EV3',    Offset(0.278, 0.541), 'ev.png'),
+    GraphNode('lab2',    '研究室2',Offset(0.860, 0.567), 'none.png'),
+    GraphNode('hall7',   '廊下7',  Offset(0.083, 0.695), 'none.png'),
+    GraphNode('stair3',  '階段3',  Offset(0.750, 0.706), 'stair.png'),
+    GraphNode('lab1',    '研究室1',Offset(0.586, 0.860), 'none.png'),
+  ];
+  static const List<GraphEdge> edges3 = [
+    GraphEdge('hall7', 'stair3'),
+    GraphEdge('ev3',   'hall7'),
+    GraphEdge('shokogi','hall7'),
+    GraphEdge('hall8', 'shokogi'),
+    GraphEdge('hall9', 'wc'),
+    GraphEdge('wc',    'stair3'),
+    GraphEdge('hall8', 'hall9'),
+    GraphEdge('hall7', 'lab1'),
+    GraphEdge('stair3','lab1'),
+    GraphEdge('lab2',  'stair3'),
+  ];
+
+  // ── 4階（PDFのノード外接矩形基準・画面いっぱいに配置）──
+  static const List<GraphNode> nodes4 = [
+    GraphNode('hall8',   '廊下8',        Offset(0.080, 0.224), 'none.png'),
+    GraphNode('hall9',   '廊下9',        Offset(0.750, 0.224), 'none.png'),
+    GraphNode('shokogi', '小講義',       Offset(0.081, 0.413), 'none.png'),
+    GraphNode('wc',      'WC4',          Offset(0.750, 0.431), 'wc.png'),
+    GraphNode('ev4',     'EV4',          Offset(0.278, 0.541), 'ev.png'),
+    GraphNode('server',  'サーバールーム',Offset(0.596, 0.541), 'none.png'),
+    GraphNode('hall7',   '廊下7',        Offset(0.083, 0.695), 'none.png'),
+    GraphNode('stair4',  '階段4',        Offset(0.750, 0.706), 'stair.png'),
+  ];
+  static const List<GraphEdge> edges4 = [
+    GraphEdge('hall7', 'stair4'),
+    GraphEdge('ev4',   'hall7'),
+    GraphEdge('shokogi','hall7'),
+    GraphEdge('hall8', 'shokogi'),
+    GraphEdge('hall9', 'wc'),
+    GraphEdge('wc',    'stair4'),
+    GraphEdge('hall8', 'hall9'),
+    GraphEdge('server','stair4'),
+  ];
+
+  // フロアごとのグラフ（1階=提示画像, 2〜4階=PDF）。
+  static const Map<int, List<GraphNode>> nodesByFloor = {
+    1: nodes, 2: nodes2, 3: nodes3, 4: nodes4,
+  };
+  static const Map<int, List<GraphEdge>> edgesByFloor = {
+    1: edges, 2: edges2, 3: edges3, 4: edges4,
+  };
 
   int _floor = 1; // 表示中の階層 (1〜4)
   List<GraphNode> get _nodes => nodesByFloor[_floor] ?? const [];
   List<GraphEdge> get _edges => edgesByFloor[_floor] ?? const [];
+  Size get _diagram => floorDiagram[_floor] ?? kFloor1Diagram;
+
+  // 上下の階へ移動できる縦移動ノード（階段・EV。各階 ev1..ev4 / stair1..stair4）
+  bool _isVerticalNode(String id) =>
+      id.startsWith('ev') || id.startsWith('stair');
 
   GraphNode? _selectedNode;
   String?    _startNodeId;
@@ -294,7 +405,7 @@ class _GraphPageState extends State<GraphPage> {
     GraphNode? found;
     double minDist = double.infinity;
     for (final n in _nodes) {
-      final p = Offset(n.position.dx * size.width, n.position.dy * size.height);
+      final p = mapNodeToScreen(n.position, size, _diagram);
       final d = (tap - p).distance;
       if (d < hitR && d < minDist) {
         minDist = d;
@@ -434,6 +545,7 @@ class _GraphPageState extends State<GraphPage> {
                               painter: GraphPainter(
                                 nodes: _nodes,
                                 edges: _edges,
+                                diagram: _diagram,
                                 selectedNodeId: _selectedNode?.id,
                                 startNodeId: _startNodeId,
                                 goalNodeId: _goalNodeId,
@@ -478,7 +590,7 @@ class _GraphPageState extends State<GraphPage> {
                   onCapture:  () => _openPhotoRegister(_selectedNode!),
                   onSetStart: () => _setStart(_selectedNode!),
                   onSetGoal:  () => _setGoal(_selectedNode!),
-                  isStair: _selectedNode!.id == 'stair',
+                  isVertical: _isVerticalNode(_selectedNode!.id),
                   canGoUp: _floor < 4,
                   canGoDown: _floor > 1,
                   onStairUp: () => _moveByStair(1),
@@ -618,7 +730,7 @@ class _DetailPanel extends StatelessWidget {
   final VoidCallback onCapture;
   final VoidCallback onSetStart;
   final VoidCallback onSetGoal;
-  final bool isStair;       // 階段ノードか
+  final bool isVertical;    // 縦移動ノード（階段・EV）か
   final bool canGoUp;       // 上の階へ移動可能か
   final bool canGoDown;     // 下の階へ移動可能か
   final VoidCallback onStairUp;
@@ -631,7 +743,7 @@ class _DetailPanel extends StatelessWidget {
     required this.onCapture,
     required this.onSetStart,
     required this.onSetGoal,
-    required this.isStair,
+    required this.isVertical,
     required this.canGoUp,
     required this.canGoDown,
     required this.onStairUp,
@@ -717,8 +829,8 @@ class _DetailPanel extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
 
-                // 階段ノードなら上下の階への移動ボタン
-                if (isStair) ...[
+                // 縦移動ノード（階段・EV）なら上下の階への移動ボタン
+                if (isVertical) ...[
                   Row(
                     children: [
                       Expanded(
@@ -820,6 +932,7 @@ class _ActionButton extends StatelessWidget {
 class GraphPainter extends CustomPainter {
   final List<GraphNode> nodes;
   final List<GraphEdge> edges;
+  final Size diagram; // 参照図の縦横（アスペクト比保持に使用）
   final String? selectedNodeId;
   final String? startNodeId;
   final String? goalNodeId;
@@ -834,6 +947,7 @@ class GraphPainter extends CustomPainter {
   const GraphPainter({
     required this.nodes,
     required this.edges,
+    required this.diagram,
     this.selectedNodeId,
     this.startNodeId,
     this.goalNodeId,
@@ -843,8 +957,7 @@ class GraphPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final pos = {
-      for (final n in nodes)
-        n.id: Offset(n.position.dx * size.width, n.position.dy * size.height),
+      for (final n in nodes) n.id: mapNodeToScreen(n.position, size, diagram),
     };
 
     // 経路エッジ集合
@@ -965,6 +1078,9 @@ class GraphPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant GraphPainter old) =>
+      old.nodes          != nodes          ||
+      old.edges          != edges          ||
+      old.diagram        != diagram        ||
       old.selectedNodeId != selectedNodeId ||
       old.startNodeId    != startNodeId    ||
       old.goalNodeId     != goalNodeId     ||
