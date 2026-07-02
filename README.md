@@ -34,7 +34,7 @@ Wifi ESSIフィンガープリントを利用します。WifiのSSIDや電波強
 |名称|ライセンス|
 |---|---|
 |Dart SDK,Flutter SDK|BSD-3-Clause|
-|Kotlin, Swift|Aoache-2.0|
+|Kotlin, Swift|Apache-2.0|
 |Java Open SDK|GPL-2.0 WITH Classpath-exception|
 |Python|PSF License|
 |SQLite|public Domain|
